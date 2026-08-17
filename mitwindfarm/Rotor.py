@@ -30,6 +30,7 @@ import warnings
 
 import numpy as np
 from UnifiedMomentumModel.Momentum import Heck, UnifiedMomentum, MomentumSolution
+from UnifiedMomentumModel.Utilities.Geometry import calc_eff_yaw
 from MITRotor import BEM as _BEM
 from MITRotor import BEMSolution, RotorDefinition
 from .Windfield import Windfield
@@ -182,7 +183,7 @@ class UnifiedAD(Rotor):
             self.rotor_grid = Point()
         else:
             self.rotor_grid = rotor_grid
-        self._model = UnifiedMomentum(beta=beta)
+        self._model = UnifiedMomentum(beta_s=beta)
 
     def __call__(self, x: float, y: float, z: float, windfield: Windfield, Ctprime, yaw = 0, tilt = 0) -> RotorSolution:
         """
@@ -235,9 +236,9 @@ class UnifiedAD_TI(UnifiedAD):
         """
         super().__init__(rotor_grid=rotor_grid)
         if couple_x0:
-            self._model = UnifiedMomentumTI(beta=beta, alpha=alpha)
+            self._model = UnifiedMomentumTI(beta_s=beta, alpha=alpha)
         else:
-            self._model = UnifiedMomentumTI_x0(beta=beta, alpha=alpha)
+            self._model = UnifiedMomentumTI_x0(beta_s=beta, alpha=alpha)
 
     def __call__(
         self, x: float, y: float, z: float, windfield: Windfield, Ctprime, yaw = 0, tilt = 0,
@@ -465,10 +466,10 @@ class UnifiedMomentumTI_x0(UnifiedMomentum):
     """
 
     def __init__(
-        self, beta=0.1403, alpha=2.32, cached=True, v4_correction=1.0, **kwargs
+        self, beta_s=0.1403, alpha=2.32, cached=True, v4_correction=1.0, **kwargs
     ):
         super().__init__(
-            beta=beta, cached=cached, v4_correction=v4_correction, **kwargs
+            beta_s=beta_s, cached=cached, v4_correction=v4_correction, **kwargs
         )
         self.alpha = alpha
 
@@ -479,7 +480,7 @@ class UnifiedMomentumTI_x0(UnifiedMomentum):
             / 4
             * (1 + u4)
             * np.sqrt((1 - a) * np.cos(self.eff_yaw) / (1 + u4))
-            / (self.beta * np.abs(1 - u4) / 2 + self.alpha * TI)
+            / (self.beta_s * np.abs(1 - u4) / 2 + self.alpha * TI)
         )  # re-compute x0 with TI influence decoupled
         result.x = (a, u4, v4, x0, dp)
         return super().post_process(result, Ctprime, yaw = yaw, tilt = tilt, **kwargs)
@@ -490,8 +491,8 @@ class UnifiedMomentumTI(UnifiedMomentum):
     Extends the Unified Momentum Model to include a TI dependence
     as described in Bastankhah and Porté-Agel (2016).
     """
-    def __init__(self, beta=0.1403, alpha=2.32, **kwargs):
-        super().__init__(beta=beta, **kwargs)
+    def __init__(self, beta_s=0.1403, alpha=2.32, **kwargs):
+        super().__init__(beta_s=beta_s, **kwargs)
         self.alpha = alpha
 
     def residual(
@@ -514,7 +515,7 @@ class UnifiedMomentumTI(UnifiedMomentum):
             / 4
             * (1 + u4)
             * np.sqrt((1 - an) * np.cos(self.eff_yaw) / (1 + u4))
-            / (self.beta * np.abs(1 - u4) / 2 + self.alpha * TI)
+            / (self.beta_s * np.abs(1 - u4) / 2 + self.alpha * TI)
         ) - x0
 
         # Eq. 1 - Rotor-normal induction in residual form.
@@ -560,3 +561,22 @@ class UnifiedMomentumTI(UnifiedMomentum):
         ) - dp
 
         return e_an, e_u4, e_v4, e_x0, e_dp
+
+def compute_x0_with_TI(rotor_solution: RotorSolution, alpha=2.32, beta_s=0.1403):
+
+    # Extract quantities from rotor solution for ease of use and documentation
+    Us = rotor_solution.REWS
+    a = rotor_solution.extra.an # HAS NOT been scaled by velocity
+    u4 = rotor_solution.u4 # HAS been scaled by velocity
+
+    # Convert yaw, tilt to rotated frame of reference
+    yaw_eff = calc_eff_yaw(rotor_solution.yaw, rotor_solution.tilt)
+
+    # Compute near wake length x0 and return
+    x0 = (
+        (np.cos(yaw_eff) * (Us + u4)) /
+        ((2*beta_s) * np.abs(Us - u4) + 4 * alpha * rotor_solution.TI)
+        * np.sqrt(((1 - a) * np.cos(yaw_eff) * Us)/(Us + u4))
+    )
+
+    return x0
