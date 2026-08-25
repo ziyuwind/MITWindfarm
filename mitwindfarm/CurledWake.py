@@ -24,7 +24,6 @@ from mitwindfarm.utils.integrate import (
     DomainExpansionRequest,
 )
 from UnifiedMomentumModel.Utilities.Geometry import calc_eff_yaw, eff_yaw_rotation, eff_yaw_inv_rotation
-from mitwindfarm.utils.differentiate import second_der
 
 
 class CurledWakeWindfield(Windfield):
@@ -421,9 +420,11 @@ class CurledWakeWindfield(Windfield):
             # gradient fields of \Delta u:
             dudy = np.gradient(_u, y, axis=0)
             dudz = np.gradient(_u, z, axis=1)
-            d2udy2 = second_der(_u, self.dy, axis=0)
-            d2udz2 = second_der(_u, self.dz, axis=1)
-            dudx = (-v * dudy - w * dudz + nu_T * (d2udy2 + d2udz2) + self.extra_fx) / u
+            div_nuu = (
+                np.gradient(nu_T * dudy, y, axis=0, edge_order=2)
+                + np.gradient(nu_T * dudz, z, axis=1, edge_order=2)
+            )
+            dudx = (-v * dudy - w * dudz + div_nuu + self.extra_fx) / u
 
             self.extra_fx *= 0  # reset extra forces after they are used - TODO: remove
 
