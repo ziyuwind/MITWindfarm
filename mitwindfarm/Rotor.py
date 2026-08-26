@@ -576,7 +576,7 @@ def compute_x0_with_TI(rotor_solution: RotorSolution, alpha=2.32, beta_s=0.1403)
 
     x0 = (
         (np.cos(yaw_eff) * (Us + u4)) /
-        ((2*beta_s) * np.abs(Us - u4) + 4 * alpha * rotor_solution.TI)
+        ((2*beta_s) * np.abs(Us - u4) / Us + 4 * alpha * rotor_solution.TI)
         * np.sqrt(((1 - a) * np.cos(yaw_eff) * Us)/(Us + u4))
     )
     return x0
