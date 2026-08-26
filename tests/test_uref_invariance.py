@@ -16,8 +16,8 @@ def _run_curled_farm(U0, k_model="const"):
         rotor_model=UnifiedAD_TI(),
         base_windfield=Uniform(U0=U0, TIamb=0.05),
         solver_kwargs=dict(
-            dy=0.1, dz=0.1,
-            integrator="scipy_rk23",
+            dy=0.1, dz=0.1, dx=0.05,
+            integrator="ef",
             k_model=k_model,
             verbose=False,
         ),
@@ -29,14 +29,19 @@ def _run_curled_farm(U0, k_model="const"):
 
 
 def test_uref_invariance_kl():
-    """REWS/U0 must be identical at U0=1 and U0=2 (k-l turbulence model)."""
+    """
+    REWS/U0 must be identical at U0=1 and U0=2 (k-l turbulence model).
+    
+    Note: "const" will not be u-invariant unless the eddy viscosity `nu_T` is 
+    also scaled with U0.
+    """
     sol1 = _run_curled_farm(U0=1.0, k_model="k-l")
     sol2 = _run_curled_farm(U0=2.0, k_model="k-l")
 
     for i in range(2):
         rews_ratio_1 = sol1.rotors[i].REWS / 1.0
         rews_ratio_2 = sol2.rotors[i].REWS / 2.0
-        assert rews_ratio_2 == approx(rews_ratio_1, rel=1e-2), (
+        assert rews_ratio_2 == approx(rews_ratio_1, rel=1e-5), (
             f"Turbine {i}: REWS/U0 differs between U0=1 ({rews_ratio_1:.4f}) "
             f"and U0=2 ({rews_ratio_2:.4f})"
         )
